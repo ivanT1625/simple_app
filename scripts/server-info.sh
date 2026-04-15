@@ -66,24 +66,36 @@ get_resource_usage() {
     echo "=== Resources ==="
 
     # CPU
-    local cpu_cores=$(nproc)
-    local load_avg=$(uptime | grep -oE 'load average: [0-9.]+, [0-9.]+, [0-9.]+' | sed 's/load average: //')
+    local cpu_cores
+    cpu_cores=$(nproc)
+    local load_avg
+    load_avg=$(uptime | grep -oE 'load average: [0-9.]+, [0-9.]+, [0-9.]+' | sed 's/load average: //')
     echo "CPU:      ${cpu_cores} cores, load average: ${load_avg}"
 
     # RAM
-    local total_ram_kb=$(free | awk '/^Mem:/ {print $2}')
-    local used_ram_kb=$(free | awk '/^Mem:/ {print $3}')
-    local ram_usage_percent=$(awk "BEGIN {printf \"%.0f\", ($used_ram_kb/$total_ram_kb)*100}")
-    local total_ram_gb=$(awk "BEGIN {printf \"%.1fG\", $total_ram_kb/1024/1024}")
-    local used_ram_gb=$(awk "BEGIN {printf \"%.1fG\", $used_ram_kb/1024/1024}")
+    local total_ram_kb
+    total_ram_kb=$(free | awk '/^Mem:/ {print $2}')
+    local used_ram_kb
+    used_ram_kb=$(free | awk '/^Mem:/ {print $3}')
+    local ram_usage_percent
+    ram_usage_percent=$(awk "BEGIN {printf \"%.0f\", ($used_ram_kb/$total_ram_kb)*100}")
+    local total_ram_gb
+    total_ram_gb=$(awk "BEGIN {printf \"%.1fG\", $total_ram_kb/1024/1024}")
+    local used_ram_gb
+    used_ram_gb=$(awk "BEGIN {printf \"%.1fG\", $used_ram_kb/1024/1024}")
     echo "RAM:      ${used_ram_gb} / ${total_ram_gb} (${ram_usage_percent}%)"
 
     # Disk
-    local disk_total_kb=$(df -k / | tail -1 | awk '{print $2}')
-    local disk_used_kb=$(df -k / | tail -1 | awk '{print $3}')
-    local disk_usage_percent=$(df / | tail -1 | awk '{print $5}' | tr -d '%')
-    local total_disk_gb=$(awk "BEGIN {printf \"%.1fG\", $disk_total_kb/1024/1024}")
-    local used_disk_gb=$(awk "BEGIN {printf \"%.1fG\", $disk_used_kb/1024/1024}")
+    local disk_total_kb
+    disk_total_kb=$(df -k / | tail -1 | awk '{print $2}')
+    local disk_used_kb
+    disk_used_kb=$(df -k / | tail -1 | awk '{print $3}')
+    local disk_usage_percent
+    disk_usage_percent=$(df / | tail -1 | awk '{print $5}' | tr -d '%')
+    local total_disk_gb
+    total_disk_gb=$(awk "BEGIN {printf \"%.1fG\", $disk_total_kb/1024/1024}")
+    local used_disk_gb
+    used_disk_gb=$(awk "BEGIN {printf \"%.1fG\", $disk_used_kb/1024/1024}")
     echo "Disk /:   ${used_disk_gb} / ${total_disk_gb} (${disk_usage_percent}%)"
     echo
 }
@@ -108,7 +120,7 @@ check_services() {
     local total_services=${#urls[@]}
     local healthy_count=0
 
-    if [ $total_services -eq 0 ]; then
+    if [ "$total_services" -eq 0 ]; then
         return 0
     fi
 
@@ -117,9 +129,11 @@ check_services() {
     for url in "${urls[@]}"; do
         if curl -f -s -o /dev/null -w "%{http_code}" "$url" -m 5; then
             # local status_code=$(curl -f -s -o /dev/null -w "%{http_code}" "$url")
-            local status_code=$(curl -f -s -o /dev/null -w "%{http_code}" "$url" -m 5)
+            local status_code
+            status_code=$(curl -f -s -o /dev/null -w "%{http_code}" "$url" -m 5)
             if [ "$status_code" -eq 200 ] 2>/dev/null; then
-              local response_time=$(curl -f -s -o /dev/null -w "%{time_total}" "$url" -m 5)
+              local response_time
+              response_time=$(curl -f -s -o /dev/null -w "%{time_total}" "$url" -m 5)
               printf "[OK]   %s (%s, %.0fms)\n" "$url" "$status_code" "$(echo "$response_time * 1000" | bc -l 2>/dev/null || echo 0)"
             ((healthy_count++))
             else
@@ -131,7 +145,7 @@ check_services() {
 
     printf "\nResult: %d/%d services healthy\n" "$healthy_count" "$total_services"
 
-    if [ $healthy_count -ne $total_services ]; then
+    if [ "$healthy_count" -ne "$total_services" ]; then
         return 1
     else
         return 0
@@ -161,23 +175,39 @@ main() {
         echo "Предупреждение: нет прав на запись в /var/log. Используем $LOG_FILE"
     fi
 
-    # Сбор всех данных
-    {
-        get_system_info
-        get_resource_usage
-        get_docker_info
+#    # Сбор всех данных
+#    {
+#        get_system_info
+#        get_resource_usage
+#        get_docker_info
+#
+#        # Проверка сервисов, если переданы URL
+#        if [ $# -gt 0 ] && [[ $1 != --* ]]; then
+#            check_services "$@"
+#            local service_result=$?
+#        else
+#            service_result=0
+#        fi
+#    } | tee -a "$LOG_FILE"
+#
+#    # Возврат кода ошибки, если какой‑то сервис недоступен
+#    exit "$service_result"
 
-        # Проверка сервисов, если переданы URL
-        if [ $# -gt 0 ] && [[ $1 != --* ]]; then
-            check_services "$@"
-            local service_result=$?
-        else
-            service_result=0
-        fi
+
+    if [ $# -gt 0 ] && [[ $1 != --* ]]; then
+      check_services "$@"
+      service_result=$?
+    else
+      service_result=0
+    fi
+
+    {
+      get_system_info
+      get_resource_usage
+      get_docker_info
     } | tee -a "$LOG_FILE"
 
-    # Возврат кода ошибки, если какой‑то сервис недоступен
-    exit $service_result
+    exit "$service_result"
 }
 
 # Запуск основной функции с передачей всех аргументов
