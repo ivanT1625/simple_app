@@ -1,0 +1,15 @@
+---
+- name: Развёртывание приложения на Ubuntu сервере
+  hosts: webservers
+  become: yes  # sudo права
+  gather_facts: yes
+
+  pre_tasks:
+    - name: Проверка подключения к хосту
+      ping:
+
+  roles:
+    - role: docker
+      tags: docker
+    - role: app
+      tags: app

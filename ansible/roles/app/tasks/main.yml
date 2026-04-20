@@ -1,0 +1,47 @@
+---
+- name: Создать директорию /opt/simple-app
+  file:
+    path: /opt/simple-app
+    state: directory
+    mode: '0755'
+
+- name: Скопировать файлы приложения на сервер
+  copy:
+    src: ../app/  # локальная директория с приложением
+    dest: /opt/simple-app/
+    mode: '0644'
+
+- name: Скопировать docker-compose.yml
+  template:
+    src: docker-compose.yml.j2  # шаблон docker-compose
+    dest: /opt/simple-app/docker-compose.yml
+
+- name: Запустить docker-compose up -d
+  community.docker.docker_compose:
+    project_src: /opt/simple-app
+    state: present
+  register: docker_compose_result
+
+- name: Проверить, что контейнер запущен
+  command: docker ps --filter "name=simple-app" --format "{{.Names}}"
+  register: container_status
+  retries: 10
+  delay: 5
+  until: container_status.stdout != ""
+
+- name: Подождать, пока приложение станет доступно
+  wait_for:
+    host: 127.0.0.1
+    port: 5000  # порт вашего приложения
+    timeout: 60
+  delegate_to: localhost
+
+- name: Проверить health endpoint
+  uri:
+    url: http://localhost:5000/health
+    method: GET
+    status_code: 200
+  register: health_check
+  retries: 5
+  delay: 10
+  until: health_check.status == 200
